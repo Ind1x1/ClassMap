@@ -6,3 +6,6 @@ build/*
 dist/*
 *.egg-info/*
 build
+
+.DS_Store
+doc/.DS_Store   
