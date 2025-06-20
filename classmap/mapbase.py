@@ -30,6 +30,48 @@ class MapBase:
             return True
         return False
 
+class ChainBase:
+    def __init__(self, class_name: str, parent = None, child = None):
+        self.class_name:str = class_name       # 类名
+        
+        self.parent_list: list[ChainBase] = []
+        self.child_list: list[ChainBase] = []
 
+        self.parent_access_list: list[dict] = []
+        self.child_access_list: list[dict] = []
+
+        self.parent:ChainBase | None  = parent # 父层次
+        self.child:ChainBase | None = child    # 子层次
+
+        self.parent_access: dict | None = None   # 父类访问
+        self.child_access: dict | None = None    # 子类访问
+
+    def add_parent(self, parent: str, assess: str):
+        chainparent = ChainBase(class_name=parent)
+        _add_parent(self, chainparent, parent, assess)
+        _add_child(chainparent, self, self.class_name, assess)
+
+    def add_child(self, child: str, assess: str):
+        childchain = ChainBase(class_name=child)
+        _add_parent(self, childchain, self.class_name, assess)
+        _add_child(childchain, self, child, assess)
+
+
+def _add_child(chain: ChainBase, childchain:ChainBase, child: str, assess:str):
+    chain.child = childchain
+    if chain.child_access is None:
+        chain.child_access = {}
+    chain.child_access[child] = assess
+    chain.child_list.append(childchain)
+    chain.child_access_list.append({child: assess})
+
+
+def _add_parent(chain: ChainBase, chainparent: ChainBase, parent: str, assess: str):
+    chain.parent = chainparent
+    if chain.parent_access is None:
+        chain.parent_access = {}
+    chain.parent_access[parent] = assess
+    chain.parent_list.append(chainparent)
+    chain.parent_access_list.append({parent: assess})
 
     
