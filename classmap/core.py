@@ -2,8 +2,8 @@ import os
 import astroid
 import warnings
 from graphviz import Digraph
-
-from .mapbase import MapBase
+import traceback
+from .mapbase import MapBase, ChainBase
 from .contents import INFO_LEVEL
     
 class ClassMap:
@@ -16,6 +16,8 @@ class ClassMap:
         self.class_file = None
         self.class_line = None
         self.class_name = None
+        self.chain = None
+        
 
     def __call__(self, class_name: str, level: INFO_LEVEL):
         match level:
@@ -25,6 +27,7 @@ class ClassMap:
                 pass
             case INFO_LEVEL.ALL_INFO:
                 self.class_name = class_name
+                self.chain = ChainBase(class_name=self.class_name)
                 self._find_class_in_dir(self.class_dir, class_name)
                 self._find_references(self.class_dir, class_name)
                 self.parse_directory()
@@ -143,11 +146,49 @@ class ClassMap:
         print(f"    │")
         print(f"    └── {class_file}  ── [LINE:{class_line}] \n")
     
+    # TODO: 这里的代码写的依托，但是能跑 （等着重构）
+    def print_chain_access(self):
+        # print("\n")
+        # print("Chained attribute access Call:")
+        # head = self.chain
+        # if head.parent is not None:
+        #     head = head.parent
+        # print(f"    ")
+        # print(f"    {head.class_name} ({list(head.child_access.values())[0]})")
+        # head = head.child
+        # while head is not None:
+        #     if head.child != None:
+        #         print(f"        │")
+        #         print(f"        └── {head.class_name} ({head.child_access})")
+        #     else:
+        #         print(f"        │")
+        #         print(f"        └── {head.class_name}")
+        #     head = head.child
+        print("\n")
+        print("Chained attribute access Call:")
+        for index, parent in enumerate(self.chain.parent_list):
+            head = parent
+            if parent.parent is not None:
+                head = parent.parent  # 找到顶格父类
+            print(f"    ")
+            print(f"    {head.class_name} ({list(head.child_access.values())[0]})")
+            head = head.child
+            while head is not None:
+                if head.child != None:
+                    print(f"        │")
+                    print(f"        └── {head.class_name} ({head.child_access})")
+                else:
+                    print(f"        │")
+                    print(f"        └── {head.class_name}")
+                head = head.child
+    
+
     def show_class_info(self):
         self.print_class(self.class_name, self.class_file, self.class_line)
         self.print_bases_and_children(self.class_map)
         # self.print_references_tree(self.references_file)
         self.print_references(self.references_file)
+        self.print_chain_access()
         print("\n")
 
     def parse_file(self, file_path: str) -> None:
@@ -167,21 +208,90 @@ class ClassMap:
     def _process_module(self, module, file_path):
         for node in module.body:
             if isinstance(node, astroid.ClassDef):
-                print(f"node: {node.name}")
-                print(f"node.bases: {node.bases}")
+                # print(f"node: {node.name}")
+                # print(f"node.bases: {node.bases}")
                 self._process_class(node, file_path)
 
     def _process_class(self, node, file_path):
         self.__children_info(node)
-        print(f"类 {node.name} 的实例变量（self.xxx）及赋值：")
+        # print(f"类 {node.name} 的实例变量（self.xxx）及赋值：")
         for init in node.body:
             if isinstance(init, astroid.FunctionDef) and init.name == "__init__":
-                print(init)
                 for assign in init.body:
+                    """
+                    Class attr的初始化大致有三种形式
+                        self.xxx = xxx                      Assign
+                        self.xxx = func() func return xxx   Assign
+                        self.init() init-> self.xxx = sss   Expr
+                    """
                     if isinstance(assign, astroid.Assign):
-                        print(assign)
+                        # print(assign.value)
+                        self.__check_chain(node.name, assign.value.func, "self." + assign.targets[0].attrname)
+                    if isinstance(assign, astroid.Expr):
+                        # pass
+                        self.__check_chain_expr(node.name, assign.value.func, assign.value.as_string())
+                        
+                        # print(assign.targets[0])
+                        # print(assign.value)
+
+    def __check_chain_expr(self, node_name:str, func, assess:str):
+        # func.attrname -> init self.init()
+        # print(node_name)
+        # print(func.attrname)
+        # print(func.frame().parent)
+        
+        module = func.frame().parent
+        for node in module.body:
+            if isinstance(node, astroid.FunctionDef) and node.name == func.attrname:
+                for ret in node.body:
+                    if isinstance(ret, astroid.Assign):
+                        # print(ret.targets[0]) # self.xxx = ->  self. + ret.targets[0].attrname
+                        if isinstance(ret.value, astroid.Call) and isinstance(ret.value.func, astroid.Name):
+                            if ret.value.func.name == self.class_name:
+                                self.chain.add_parent(node_name, assess)
+
+    def __check_chain(self, node_name: str, func, assess: str):
+        if isinstance(func, astroid.Name):
+            if func.name == self.class_name:
+                self.chain.add_parent(node_name, assess)
+        if isinstance(func, astroid.Attribute):
+            #func.as_string())     # 获取func属性的函数
+            # 在当前模块中查找函数定义
+            module = func.frame().parent
+            for node in module.body:
+                # print(node)
+                if isinstance(node, astroid.FunctionDef) and node.name == func.attrname:
+                    for ret in node.body:
+                        if isinstance(ret.value.func, astroid.Name):
+                            if ret.value.func.name == self.class_name:
+                                self.chain.add_parent(node_name, assess)
+                        # print(ret.value.func)
+                        # if isinstance(ret.value, astroid.Name):
+                        #     print(ret.value.name)
+                        #     if ret.value.name == self.class_name:
+                        #         self.chain.add_parent(node_name, assess)
+                # if isinstance(node, astroid.FunctionDef):
+                #     print(node)
+                # print(f"函数代码:\n{node.as_string()}")
+            #print(assess)               # self.xxx = func()
+                #print(self.chain.parent_access)
+            
+        # if isinstance(func, astroid.Name):
+        #     print("run")
+        #     print(self.chain.class_name)
+        #     self.chain.add_parent(, assess)
+        #     print(self.chain.parent_access)
+            
+            # chain.add_parent(func.name)
+            
+            # 命中
+
+            # if value.name == self.class_name:
+            #     print("")
+                        
 
     def __children_info(self, node):
+        #print(node.root().file)
         for base in node.bases:
             if base.as_string() == self.class_name:
                 self.class_map._Add_children(node.name)
@@ -204,8 +314,13 @@ class ClassMap:
 
         except SyntaxError as e:
             print(f"Grammatical error - file {file_path}: {e}")
+            # 打印出错的行号和内容
+            if hasattr(e, 'lineno') and hasattr(e, 'text'):
+                print(f"出错行号: {e.lineno}")
+                print(f"出错代码: {e.text.strip()}")
         except Exception as e:
             print(f"An Error occurred when parsing the {file_path} : {e}")
+            traceback.print_exc()  # 打印完整的错误堆栈
 
     def parse_directory(self) -> None:
         self.class_map = MapBase(
