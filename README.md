@@ -39,27 +39,38 @@ classmap find MyClass -d /path/to/project
 
 ## 示例输出
 
+```text
+ClassMap
+    │
+    └── ./classmap/core.py  ── [LINE:9] 
+
+Bases:
+Children:
+    └── TestMap
+
+
+References:
+    ├── ./classmap/__init__.py
+    ├── ./classmap/cli.py
+    └── ./classmap/test_map.py
+
+
+Chained attribute access Call:
+    
+    TestMap (self.class_map)
+        │
+        └── ClassMap
+    
+    TestMap (self.test)
+        │
+        └── ClassMap
+    
+    TestMap (self.init())
+        │
+        └── ClassMap
 ```
-类 'MyClass' 的继承关系:
-定义位置: /path/to/myclass.py
-
-父类:
-  - BaseClass
-  - Interface1
-
-子类:
-  - ChildClass1
-  - ChildClass2
-
-
-## 依赖
-
-- Python 3.6+
-- astroid
-- graphviz
 
 注意：使用此工具需要安装 Graphviz。在 macOS 上可以使用 Homebrew 安装：
 ```bash
 brew install graphviz
-``` 
-
+```
