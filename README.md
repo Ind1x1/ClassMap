@@ -2,7 +2,7 @@
   <img src="doc/img/classmap.png" alt="ClassMap 继承关系图" width="600"/>
 </p>
 
-# ClassMap
+#
 
 ClassMap 是一个基于astroid Python 工具，用于分析 Python 项目中的类继承关系和代码引用。它可以：
 
