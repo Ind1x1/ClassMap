@@ -191,19 +191,36 @@ class ClassMap:
         self.print_chain_access()
         print("\n")
 
+    # TODO: try套try 逆天完了
     def parse_file(self, file_path: str) -> None:
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            with warnings.catch_warnings():
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except Exception as e:
+                print(f"Error reading file {file_path}: {e}")
+                traceback.print_exc()
+                return
+
+            try:
+                with warnings.catch_warnings():
                     warnings.simplefilter("ignore", SyntaxWarning)
                     module = astroid.parse(content, path=file_path)
-                
-            self._process_module(module, file_path)
-        except SyntaxError as e:
-            print(f"Grammatical error - file {file_path}: {e}")
+            except Exception as e:
+                print(f"Error parsing AST for {file_path}: {e}")
+                traceback.print_exc()
+                return
+
+            try:
+                self._process_module(module, file_path)
+            except Exception as e:
+                print(f"Error processing module for {file_path}: {e}")
+                traceback.print_exc()
+                return
+
         except Exception as e:
-            print(f"An Error occurred when parsing the {file_path} : {e}")
+            print(f"Unknown error for {file_path}: {e}")
+            traceback.print_exc()
 
     def _process_module(self, module, file_path):
         for node in module.body:
@@ -219,77 +236,61 @@ class ClassMap:
             if isinstance(init, astroid.FunctionDef) and init.name == "__init__":
                 for assign in init.body:
                     """
-                    Class attr的初始化大致有三种形式
-                        self.xxx = xxx                      Assign
-                        self.xxx = func() func return xxx   Assign
-                        self.init() init-> self.xxx = sss   Expr
+                    Class attr
+                        def __init__(self, class_map: ClassMap):
+                            self.base = class_map
+                            self.class_map = ClassMap()
+                            self.test = self.mapcreate()
+                            self.init()
+
+                            Name.class_map(name='class_map')
+                            Call(func=<Name.ClassMap l.6 at 0x107854da0>,
+                                args=[],
+                                keywords=[])
+                            Call(func=<Attribute.mapcreate l.7 at 0x107854e90>,
+                                args=[],
+                                keywords=[])
                     """
                     if isinstance(assign, astroid.Assign):
-                        # print(assign.value)
-                        self.__check_chain(node.name, assign.value.func, "self." + assign.targets[0].attrname)
-                    if isinstance(assign, astroid.Expr):
-                        # pass
+                        if isinstance(assign.value, astroid.Name):
+                            pass
+                        if isinstance(assign.value, astroid.Call):
+                            self.__check_chain(node.name, assign.value.func, assign.targets[0].as_string())
+                    if isinstance(assign, astroid.Expr): 
                         self.__check_chain_expr(node.name, assign.value.func, assign.value.as_string())
-                        
-                        # print(assign.targets[0])
-                        # print(assign.value)
+
 
     def __check_chain_expr(self, node_name:str, func, assess:str):
-        # func.attrname -> init self.init()
-        # print(node_name)
-        # print(func.attrname)
-        # print(func.frame().parent)
-        
         module = func.frame().parent
         for node in module.body:
-            if isinstance(node, astroid.FunctionDef) and node.name == func.attrname:
-                for ret in node.body:
-                    if isinstance(ret, astroid.Assign):
-                        # print(ret.targets[0]) # self.xxx = ->  self. + ret.targets[0].attrname
-                        if isinstance(ret.value, astroid.Call) and isinstance(ret.value.func, astroid.Name):
-                            if ret.value.func.name == self.class_name:
-                                self.chain.add_parent(node_name, assess)
+            if isinstance(node, astroid.FunctionDef):
+                attr_name = func.attrname if hasattr(func, 'attrname') else func.name if hasattr(func, 'name') else None
+                if attr_name and node.name == attr_name:
+                    for ret in node.body:
+                        if (isinstance(ret, astroid.Assign) and 
+                            isinstance(ret.value, astroid.Call) and
+                            isinstance(ret.value.func, astroid.Name) and
+                            ret.value.func.name == self.class_name):
+                            self.chain.add_parent(node_name, assess)
 
     def __check_chain(self, node_name: str, func, assess: str):
         if isinstance(func, astroid.Name):
             if func.name == self.class_name:
                 self.chain.add_parent(node_name, assess)
         if isinstance(func, astroid.Attribute):
-            #func.as_string())     # 获取func属性的函数
-            # 在当前模块中查找函数定义
             module = func.frame().parent
             for node in module.body:
-                # print(node)
                 if isinstance(node, astroid.FunctionDef) and node.name == func.attrname:
+                    TempName = None
                     for ret in node.body:
-                        if isinstance(ret.value.func, astroid.Name):
-                            if ret.value.func.name == self.class_name:
+                        if isinstance(ret, astroid.Assign) and isinstance(ret.value, astroid.Call) and isinstance(ret.value.func, astroid.Name) and ret.value.func.name == self.class_name:
+                            # a = class 
+                            TempName = ret.targets[0].name
+                            # print(TempName)
+                        if isinstance(ret, astroid.Return):
+                            if TempName is not None and ret.value.name == TempName:
                                 self.chain.add_parent(node_name, assess)
-                        # print(ret.value.func)
-                        # if isinstance(ret.value, astroid.Name):
-                        #     print(ret.value.name)
-                        #     if ret.value.name == self.class_name:
-                        #         self.chain.add_parent(node_name, assess)
-                # if isinstance(node, astroid.FunctionDef):
-                #     print(node)
-                # print(f"函数代码:\n{node.as_string()}")
-            #print(assess)               # self.xxx = func()
-                #print(self.chain.parent_access)
-            
-        # if isinstance(func, astroid.Name):
-        #     print("run")
-        #     print(self.chain.class_name)
-        #     self.chain.add_parent(, assess)
-        #     print(self.chain.parent_access)
-            
-            # chain.add_parent(func.name)
-            
-            # 命中
-
-            # if value.name == self.class_name:
-            #     print("")
                         
-
     def __children_info(self, node):
         #print(node.root().file)
         for base in node.bases:
@@ -314,13 +315,12 @@ class ClassMap:
 
         except SyntaxError as e:
             print(f"Grammatical error - file {file_path}: {e}")
-            # 打印出错的行号和内容
             if hasattr(e, 'lineno') and hasattr(e, 'text'):
                 print(f"出错行号: {e.lineno}")
                 print(f"出错代码: {e.text.strip()}")
         except Exception as e:
             print(f"An Error occurred when parsing the {file_path} : {e}")
-            traceback.print_exc()  # 打印完整的错误堆栈
+            traceback.print_exc()  
 
     def parse_directory(self) -> None:
         self.class_map = MapBase(

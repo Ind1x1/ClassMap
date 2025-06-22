@@ -1,15 +1,15 @@
 from classmap.core import ClassMap
 
-class TestMap(ClassMap):
-    def __init__(self):
+class TestMap:
+    def __init__(self, class_map: ClassMap):
+        self.base = class_map
         self.class_map = ClassMap()
         self.test = self.mapcreate()
         self.init()
 
-        # 找到Call
-
     def mapcreate(self):
-        return ClassMap()
+        a = ClassMap()
+        return a
 
     def test_map(self):
         self.class_map.parse_directory()
