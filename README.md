@@ -14,7 +14,7 @@ ClassMap 是一个基于astroid Python 工具，用于分析 Python 项目中的
 
 1. 克隆仓库：
 ```bash
-git clone [repository-url]
+git clone git@github.com:Ind1x1/ClassMap.git
 cd ClassMap
 ```
 
